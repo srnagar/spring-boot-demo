@@ -5,7 +5,7 @@
     <file>${LOGS}/spring-boot-logger.log</file>
     <encoder
       class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
-      <Pattern>%black(%d{ISO8601}) %highlight(%-5level) [%blue(%t)] %blue(%logger{100}): %msg%n%throwable</Pattern>
+      <Pattern>%d{ISO8601} %-5level [%t] %logger{100}: %msg%n%throwable</Pattern>
     </encoder>
 
     <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
