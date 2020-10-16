@@ -1,10 +1,10 @@
 package com.example.demo;
 
+import com.azure.messaging.eventhubs.EventData;
 import com.azure.messaging.eventhubs.EventProcessorClient;
 import com.azure.messaging.eventhubs.EventProcessorClientBuilder;
 import com.azure.messaging.eventhubs.checkpointstore.blob.BlobCheckpointStore;
 import com.azure.messaging.eventhubs.models.EventContext;
-import com.azure.messaging.eventhubs.models.PartitionContext;
 import com.azure.storage.blob.BlobContainerAsyncClient;
 import com.azure.storage.blob.BlobContainerClientBuilder;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class EventProcessorBean {
 
-    private final Map<String, OffsetDateTime> lastEventReceivedEvent = new HashMap<>();
+    private final Map<String, EventStats> lastEventReceivedEvent = new HashMap<>();
     public EventProcessorBean(
             @Value("${azure.eventhub.connection-string:}") String eventHubConnectionString,
             @Value("${azure.eventhub.name:}") String eventHubName,
@@ -60,32 +60,32 @@ public class EventProcessorBean {
         log.info("Processor started at " + processorStartTime);
 
         Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(() -> {
-            log.info("Processor running since {}. Current partition state: {}", processorStartTime,
+            log.info("Processor running since {}. Current partition state: \n {}\n", processorStartTime,
                     lastEventReceivedEvent);
         }, 0, 1, TimeUnit.MINUTES);
     }
 
   private void processEvent(EventContext eventContext) {
-      Long sequenceNumber = eventContext.getEventData().getSequenceNumber();
-      PartitionContext partitionContext = eventContext.getPartitionContext();
+      EventData eventData = eventContext.getEventData();
+      Long sequenceNumber = eventData.getSequenceNumber();
+      String partitionId = eventContext.getPartitionContext().getPartitionId();
       boolean shouldLog = sequenceNumber % 100 == 0;
 
       if (shouldLog) {
-          log.info(
-                  "Received event from partition = {}, seq num = {}",
-                  partitionContext.getPartitionId(),
-                  sequenceNumber);
+          log.info("Received event from partition = {}, seq num = {}", partitionId, sequenceNumber);
       }
 
       eventContext.updateCheckpoint();
 
-      this.lastEventReceivedEvent.put(partitionContext.getPartitionId(),
-              eventContext.getEventData().getEnqueuedTime().atOffset(ZoneOffset.UTC));
+      this.lastEventReceivedEvent.putIfAbsent(partitionId, new EventStats());
+      EventStats eventStats = this.lastEventReceivedEvent.get(partitionId);
+      eventStats.setEnqueuedTime(eventData.getEnqueuedTime().atOffset(ZoneOffset.UTC));
+      eventStats.setProcessedTime(OffsetDateTime.now(ZoneOffset.UTC));
+      eventStats.setLastSequenceNumber(eventData.getSequenceNumber());
+      eventStats.incrementEventsReceivedCount();
 
       if (shouldLog) {
-          log.info("Completed processing event partition = {}, seq num = {}",
-                  partitionContext.getPartitionId(),
-                  sequenceNumber);
+          log.info("Completed processing event partition = {}, seq num = {}", partitionId, sequenceNumber);
       }
   }
 
